@@ -1,0 +1,56 @@
+#!/bin/bash
+# usage: bin/compile <build-dir> <cache-dir> <env-dir>
+
+set -euo pipefail
+
+mkdir -p "$1" "$2"
+
+BUILD_DIR=$(cd "$1" && pwd)
+CACHE_DIR=$(cd "$2/" && pwd)
+ENV_DIR=$3
+BUIDLPACK_DIR=$(cd "$(dirname $0)/.." && pwd)
+
+step() {
+  echo "-----> $@"
+}
+
+ubuntuVersion() {
+  case $STACK in
+  "cedar-14" )
+    echo "14"
+    ;;
+  "heroku-16" )
+    echo "16"
+    ;;
+  * )
+    echo "Unsupported stack"
+    exit 1
+  esac
+}
+
+ensureClangVersion() {
+  local clangVersion="$1"
+  local signaturePublicKey="${CACHE_DIR}/pubkey-clang.asc"
+  if [ ! -r "$signaturePublicKey" ]; then
+    curl http://releases.llvm.org/4.0.0/hans-gpg-key.asc -s -o "$signaturePublicKey"
+  fi
+  local clangArchiveName="clang-${clangVersion}-ubuntu-$(ubuntuVersion).tar.xz"
+  if [ -r "${CACHE_DIR}/${clangArchiveName}" ]; then
+    step "using clang ${clangVersion} for ubuntu-$(ubuntuVersion).04"
+  else
+    rm -rf "$CACHE_DIR/clang-*"
+    step "downloading clang v${clangVersion} for ubuntu $(ubuntuVersion).04"
+    local clangURL="http://releases.llvm.org/${clangVersion}/clang+llvm-${clangVersion}-x86_64-linux-gnu-ubuntu-$(ubuntuVersion).04.tar.xz"
+    curl "$clangURL" -s -L -o "${CACHE_DIR}/${clangArchiveName}"
+    curl "${clangURL}.sig" -s -L -o "${CACHE_DIR}/${clangArchiveName}.sig"
+  fi
+  gpg -q --import "$signaturePublicKey"
+  gpg -q --always-trust --verify "${CACHE_DIR}/${clangArchiveName}.sig"
+  local clangInstallationPath="${BUIDLPACK_DIR}/clang"
+  mkdir -p "$clangInstallationPath"
+  xz -d -c "${CACHE_DIR}/${clangArchiveName}" | tar -x -C "$clangInstallationPath" --strip-components 1
+  export PATH="$clangInstallationPath/bin:$PATH"
+}
+
+ensureClangVersion 4.0.0
+
