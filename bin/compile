@@ -5,7 +5,7 @@ set -euo pipefail
 
 mkdir -p "$1" "$2"
 
-BUILD_DIR=$(cd "$1" && pwd)
+BUILD_DIR=$(cd "$1/" && pwd)
 CACHE_DIR=$(cd "$2/" && pwd)
 ENV_DIR=$3
 BUIDLPACK_DIR=$(cd "$(dirname $0)/.." && pwd)
@@ -28,29 +28,83 @@ ubuntuVersion() {
   esac
 }
 
-ensureClangVersion() {
-  local clangVersion="$1"
-  local signaturePublicKey="${CACHE_DIR}/pubkey-clang.asc"
+ensureDownloaded() {
+  local name="$1"
+  local downloadURL="$2"
+  local signaturePublicKeyURL="$3"
+  local signaturePublicKey="${CACHE_DIR}/pubkey-$name.asc"
   if [ ! -r "$signaturePublicKey" ]; then
-    curl http://releases.llvm.org/4.0.0/hans-gpg-key.asc -s -o "$signaturePublicKey"
+    curl $signaturePublicKeyURL -s -o $signaturePublicKey
   fi
-  local clangArchiveName="clang-${clangVersion}-ubuntu-$(ubuntuVersion).tar.xz"
-  if [ -r "${CACHE_DIR}/${clangArchiveName}" ]; then
-    step "using clang ${clangVersion} for ubuntu-$(ubuntuVersion).04"
-  else
-    rm -rf "$CACHE_DIR/clang-*"
-    step "downloading clang v${clangVersion} for ubuntu $(ubuntuVersion).04"
-    local clangURL="http://releases.llvm.org/${clangVersion}/clang+llvm-${clangVersion}-x86_64-linux-gnu-ubuntu-$(ubuntuVersion).04.tar.xz"
-    curl "$clangURL" -s -L -o "${CACHE_DIR}/${clangArchiveName}"
-    curl "${clangURL}.sig" -s -L -o "${CACHE_DIR}/${clangArchiveName}.sig"
+  local archiveName="$name-ubuntu-$(ubuntuVersion)"
+  if [ ! -r "${CACHE_DIR}/$archiveName" ]; then
+    rm -rf "${CACHE_DIR}/$name-*"
+    curl $downloadURL -s -L -o "${CACHE_DIR}/$archiveName"
+    curl "$downloadURL.sig" -s -L -o "${CACHE_DIR}/$archiveName.sig"
   fi
-  gpg -q --import "$signaturePublicKey"
-  gpg -q --always-trust --verify "${CACHE_DIR}/${clangArchiveName}.sig"
-  local clangInstallationPath="${BUIDLPACK_DIR}/clang"
-  mkdir -p "$clangInstallationPath"
-  xz -d -c "${CACHE_DIR}/${clangArchiveName}" | tar -x -C "$clangInstallationPath" --strip-components 1
-  export PATH="$clangInstallationPath/bin:$PATH"
+  gpg -q --import $signaturePublicKey
+  gpg -q --always-trust --verify "${CACHE_DIR}/$archiveName.sig"
+  echo "${CACHE_DIR}/$archiveName"
 }
 
-ensureClangVersion 4.0.0
+ensureClang() {
+  local clangVersion=5.0.0
+  local clangURL="http://releases.llvm.org/${clangVersion}/clang+llvm-${clangVersion}-linux-x86_64-ubuntu$(ubuntuVersion).04.tar.xz"
+  local clangSignatureURL="http://releases.llvm.org/${clangVersion}/hans-gpg-key.asc"
+  local clangArchivePath=$(ensureDownloaded clang-$clangVersion $clangURL $clangSignatureURL)
+  step "using clang-$clangVersion for ubuntu $(ubuntuVersion).04"
+  local clangInstallationPath="${BUIDLPACK_DIR}/clang"
+  mkdir -p $clangInstallationPath
+  xz -d -c $clangArchivePath | tar -x -C $clangInstallationPath --strip-components 1
+  export PATH="${clangInstallationPath}/bin:$PATH"
+}
 
+ensureSwift() {
+  local swiftVersion=4.0
+  local swiftURL="https://swift.org/builds/swift-$swiftVersion-release/ubuntu$(ubuntuVersion)04/swift-$swiftVersion-RELEASE/swift-$swiftVersion-RELEASE-ubuntu$(ubuntuVersion).04.tar.gz"
+  local swiftSignatureURL="https://swift.org/keys/all-keys.asc"
+  local swiftArchivePath=$(ensureDownloaded swift-$swiftVersion $swiftURL $swiftSignatureURL)
+  step "using swift-$swiftVersion for ubuntu $(ubuntuVersion).04"
+  local swiftInstallationPath="${BUIDLPACK_DIR}/swift"
+  mkdir -p $swiftInstallationPath
+  tar xzf $swiftArchivePath -C $swiftInstallationPath --strip-components 1
+  export PATH="${swiftInstallationPath}/usr/bin:$PATH"
+}
+
+ensureClang
+ensureSwift
+
+step "Building binary"
+
+swiftBuildConfiguration() {
+  if [ -f "$ENV_DIR/SWIFT_BUILD_CONFIGURATION" ]; then
+    local configuration=$(cat "$ENV_DIR/SWIFT_BUILD_CONFIGURATION")
+    if [ $configuration == "release" ||  $configuration == "debug" ]; then
+      echo $configuration
+    else
+      echo "Unsupported build configuration"
+      exit 1
+    fi
+  else
+    echo release
+  fi
+}
+
+swiftBuildFlags() {
+  if [ -f "$ENV_DIR/SWIFT_BUILD_FLAGS" ]; then
+    echo $(cat "$ENV_DIR/SWIFT_BUILD_FLAGS")
+  else
+    echo ""
+  fi
+}
+
+binaryPath=$(swift build $(swiftBuildFlags) --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration) --show-bin-path)
+swift build $(swiftBuildFlags) --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration)
+
+step "Installing binary in $BUILD_DIR/bin"
+
+mkdir -p "$BUILD_DIR/bin"
+find $binaryPath -maxdepth 1 -type f -perm -111 -exec cp {} "$BUILD_DIR/bin" \;
+
+mkdir -p "$BUILD_DIR/.profile.d"
+echo "PATH=$PATH:$BUILD_DIR/bin" >> "$BUILD_DIR/.profile.d/swift.sh"
