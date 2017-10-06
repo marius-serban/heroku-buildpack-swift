@@ -10,9 +10,8 @@ CACHE_DIR=$(cd "$2/" && pwd)
 ENV_DIR=$3
 BUIDLPACK_DIR=$(cd "$(dirname $0)/.." && pwd)
 
-mkdir -p "$BUILD_DIR/bin"
 mkdir -p "$BUILD_DIR/.profile.d"
-echo "PATH=$PATH:$BUILD_DIR/bin" >> "$BUILD_DIR/.profile.d/swift.sh"
+echo "PATH=$PATH:$HOME/bin" >> "$BUILD_DIR/.profile.d/swift.sh"
 
 step() {
   echo "-----> $@"
@@ -107,4 +106,5 @@ swift build $(swiftBuildFlags) --package-path $BUILD_DIR --build-path $CACHE_DIR
 
 step "Installing binary in $BUILD_DIR/bin"
 
+mkdir -p "$BUILD_DIR/bin"
 find $binaryPath -maxdepth 1 -type f -perm -111 -exec cp {} "$BUILD_DIR/bin" \;
