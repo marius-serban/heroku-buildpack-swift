@@ -107,4 +107,4 @@ swift build $(swiftBuildFlags) --package-path $BUILD_DIR --build-path $CACHE_DIR
 step "Installing binary in $BUILD_DIR/bin"
 
 mkdir -p "$BUILD_DIR/bin"
-find $binaryPath -maxdepth 1 -type f -perm -111 -exec cp {} "$BUILD_DIR/bin" \;
+find $binaryPath -maxdepth 1 -type f -perm /a+x -exec cp {} "$BUILD_DIR/bin" \;
