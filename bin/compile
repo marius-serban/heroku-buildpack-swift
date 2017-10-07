@@ -102,7 +102,7 @@ swiftBuildFlags() {
 }
 
 binaryPath=$(swift build $(swiftBuildFlags) --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration) --show-bin-path)
-swift build $(swiftBuildFlags) --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration)
+swift build $(swiftBuildFlags) -Xswiftc -static-stdlib --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration)
 
 step "Installing binary in $BUILD_DIR/bin"
 
