@@ -12,7 +12,6 @@ BUIDLPACK_DIR=$(cd "$(dirname $0)/.." && pwd)
 
 mkdir -p "$BUILD_DIR/.profile.d"
 echo "PATH=$PATH:$HOME/bin" >> "$BUILD_DIR/.profile.d/swift.sh"
-echo "LD_LIBRARY_PATH=$HOME/lib" >> "$BUILD_DIR/.profile.d/swift.sh"
 
 step() {
   echo "-----> $@"
@@ -103,12 +102,9 @@ swiftBuildFlags() {
 }
 
 binaryPath=$(swift build $(swiftBuildFlags) --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration) --show-bin-path)
-swift build $(swiftBuildFlags) --static-swift-stdlib --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration)
+swift build $(swiftBuildFlags) --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration) -Xswiftc -static-executable -Xswiftc -v --verbose
 
 step "Installing binary in $BUILD_DIR/bin"
 
 mkdir -p "$BUILD_DIR/bin"
 find $binaryPath -maxdepth 1 -type f -perm /a+x -exec cp {} "$BUILD_DIR/bin" \;
-
-mkdir -p "$BUILD_DIR/lib"
-find $binaryPath -name '*.so' -type f -exec cp {} $BUILD_DIR/lib \;
