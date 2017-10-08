@@ -12,6 +12,7 @@ BUIDLPACK_DIR=$(cd "$(dirname $0)/.." && pwd)
 
 mkdir -p "$BUILD_DIR/.profile.d"
 echo "PATH=$PATH:$HOME/bin" >> "$BUILD_DIR/.profile.d/swift.sh"
+echo "LD_LIBRARY_PATH=$HOME/lib" >> "$BUILD_DIR/.profile.d/swift.sh"
 
 step() {
   echo "-----> $@"
@@ -68,7 +69,7 @@ ensureSwift() {
   local swiftSignatureURL="https://swift.org/keys/all-keys.asc"
   local swiftArchivePath=$(ensureDownloaded swift-$swiftVersion $swiftURL $swiftSignatureURL)
   step "using swift-$swiftVersion for ubuntu $(ubuntuVersion).04"
-  local swiftInstallationPath="${BUIDLPACK_DIR}/swift"
+  swiftInstallationPath="${BUIDLPACK_DIR}/swift"
   mkdir -p $swiftInstallationPath
   tar xzf $swiftArchivePath -C $swiftInstallationPath --strip-components 1
   export PATH="${swiftInstallationPath}/usr/bin:$PATH"
@@ -102,9 +103,13 @@ swiftBuildFlags() {
 }
 
 binaryPath=$(swift build $(swiftBuildFlags) --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration) --show-bin-path)
-swift build $(swiftBuildFlags) -Xswiftc -static-stdlib --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration)
+swift build $(swiftBuildFlags) --package-path $BUILD_DIR --build-path $CACHE_DIR/.build --configuration $(swiftBuildConfiguration)
 
 step "Installing binary in $BUILD_DIR/bin"
 
 mkdir -p "$BUILD_DIR/bin"
 find $binaryPath -maxdepth 1 -type f -perm /a+x -exec cp {} "$BUILD_DIR/bin" \;
+
+mkdir -p "$BUILD_DIR/lib"
+cp $swiftInstallationPath/usr/lib/swift/linux/*.so $BUILD_DIR/lib
+find $binaryPath -name '*.so' -type f -exec cp {} $BUILD_DIR/lib \;
